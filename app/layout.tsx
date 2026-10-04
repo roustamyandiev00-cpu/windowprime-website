@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://windowprime.alight-bell-9330.chatgpt.site"),
+  metadataBase: new URL("https://windowprime.windowpro-begmail-com.chatgpt.site"),
   title: {
     default: "Windowprime | Ramen & deuren op maat",
     template: "%s | Windowprime",
