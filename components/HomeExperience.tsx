@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { FormEvent, useState } from "react";
+import { toWhatsAppNumber } from "@/lib/site-settings";
 import { Brand } from "./Brand";
 
 type Message = {
@@ -10,7 +11,19 @@ type Message = {
   text: string;
 };
 
-const WHATSAPP_NUMBER = "32491970195";
+type PublicSettings = {
+  companyName: string;
+  companyEmail: string;
+  phoneNumber: string;
+  whatsappNumber: string;
+  openingHours: string;
+  address: string;
+  aiName: string;
+  aiWelcomeMessage: string;
+  aiFallbackMessage: string;
+  handoffEnabled: boolean;
+  handoffSummary: boolean;
+};
 
 const answers: Record<string, string> = {
   "Wat kosten nieuwe ramen?":
@@ -42,13 +55,14 @@ const products = [
   },
 ];
 
-export function HomeExperience() {
+export function HomeExperience({ settings }: { settings: PublicSettings }) {
+  const whatsappNumber = toWhatsAppNumber(settings.whatsappNumber);
   const [menuOpen, setMenuOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     {
       from: "agent",
-      text: "Hallo, ik ben Nova van Windowprime. Waarmee kan ik je helpen?",
+      text: settings.aiWelcomeMessage,
     },
   ]);
   const [input, setInput] = useState("");
@@ -62,10 +76,10 @@ export function HomeExperience() {
         from: "agent",
         text:
           answers[question] ??
-          "Dat wil ik correct voor je uitzoeken. Ik kan dit gesprek klaarzetten voor een Windowprime-specialist via WhatsApp.",
+          settings.aiFallbackMessage,
       },
     ]);
-    if (!answers[question]) setHandoff(true);
+    if (!answers[question] && settings.handoffEnabled) setHandoff(true);
   }
 
   function submitMessage(event: FormEvent<HTMLFormElement>) {
@@ -76,11 +90,11 @@ export function HomeExperience() {
     ask(question);
   }
 
-  const whatsappSummary = messages
-    .map((message) => `${message.from === "visitor" ? "Klant" : "Nova"}: ${message.text}`)
-    .join("\n");
-  const whatsappUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(
-    `Hallo Windowprime, ik wil graag verder praten met een specialist.\n\nSamenvatting van mijn chat:\n${whatsappSummary}`,
+  const whatsappSummary = settings.handoffSummary ? messages
+    .map((message) => `${message.from === "visitor" ? "Klant" : settings.aiName}: ${message.text}`)
+    .join("\n") : "";
+  const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(
+    `Hallo ${settings.companyName}, ik wil graag verder praten met een specialist.${whatsappSummary ? `\n\nSamenvatting van mijn chat:\n${whatsappSummary}` : ""}`,
   )}`;
 
   return (
@@ -239,7 +253,7 @@ export function HomeExperience() {
           <p className="section-label section-label--light">Klaar voor de volgende stap?</p>
           <h2>Vertel ons over<br /><em>jouw project.</em></h2>
           <p>Ontvang persoonlijk advies en een vrijblijvende offerte op maat.</p>
-          <a className="button button--light" href="mailto:info@windowprime.be">
+          <a className="button button--light" href={`mailto:${settings.companyEmail}`}>
             Plan een gesprek <span>↗</span>
           </a>
         </div>
@@ -249,7 +263,7 @@ export function HomeExperience() {
         <div className="footer-main section-shell">
           <Brand />
           <div><strong>Navigatie</strong><a href="#oplossingen">Oplossingen</a><a href="#werkwijze">Werkwijze</a><a href="#realisaties">Realisaties</a></div>
-          <div><strong>Contact</strong><a href="mailto:info@windowprime.be">info@windowprime.be</a><a href={`https://wa.me/${WHATSAPP_NUMBER}`} target="_blank" rel="noreferrer">0491 97 01 95</a><span>Ma–Vr · 08:00–18:00</span><span>België</span></div>
+          <div><strong>Contact</strong><a href={`mailto:${settings.companyEmail}`}>{settings.companyEmail}</a><a href={`https://wa.me/${whatsappNumber}`} target="_blank" rel="noreferrer">{settings.phoneNumber}</a><span>{settings.openingHours}</span><span>{settings.address}</span></div>
           <div><strong>Volg ons</strong><a href="#contact">Instagram ↗</a><a href="#contact">Facebook ↗</a><a href="#contact">LinkedIn ↗</a></div>
         </div>
         <div className="footer-bottom section-shell">
@@ -266,14 +280,14 @@ export function HomeExperience() {
         aria-label={chatOpen ? "Chat sluiten" : "Chat openen"}
         aria-expanded={chatOpen}
       >
-        {chatOpen ? "×" : <><span className="chat-spark">✦</span><span>Vraag het aan Nova</span></>}
+        {chatOpen ? "×" : <><span className="chat-spark">✦</span><span>Vraag het aan {settings.aiName}</span></>}
       </button>
 
       {chatOpen && (
         <aside className="chat-panel" aria-label="Windowprime AI-chat">
           <header className="chat-header">
             <div className="agent-avatar">N</div>
-            <div><strong>Nova</strong><span><i /> Windowprime assistent</span></div>
+            <div><strong>{settings.aiName}</strong><span><i /> {settings.companyName} assistent</span></div>
             <button onClick={() => setChatOpen(false)} aria-label="Chat sluiten">×</button>
           </header>
           <div className="chat-messages" aria-live="polite">

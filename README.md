@@ -6,7 +6,8 @@ Publieke website en beheerprototype voor Windowprime ramen & deuren.
 
 - responsieve landingspagina met diensten, werkwijze en contact;
 - interactieve AI-chatdemo met werkende doorklik en chatsamenvatting naar WhatsApp;
-- beheeromgeving op `/admin` voor gesprekken, SEO, AI-kennis en instellingen;
+- beveiligde beheeromgeving op `/admin` voor gesprekken, SEO, AI-kennis en instellingen;
+- blijvende database-instellingen voor bedrijfsprofiel, WhatsApp, AI, overdracht, meldingen en privacy;
 - eigen hero- en socialmedia-afbeeldingen in `public/`;
 - server-renderingtests voor de publieke en beheerpagina.
 
@@ -30,8 +31,8 @@ npm test
 
 ## Productiekoppelingen
 
-De WhatsApp-doorklik gebruikt het ingestelde bedrijfsnummer. De beheeromgeving
-en AI-chat zijn verder een functioneel visueel prototype. Voor productie moeten
-authenticatie, databaseopslag, het AI-model en de officiële WhatsApp Business
-API nog veilig worden gekoppeld. Die stappen vereisen eigen accounts,
-toegangsregels en goedgekeurde configuratie.
+De WhatsApp-doorklik gebruikt het nummer uit de beheeromgeving. Gewone
+instellingen worden in de database bewaard en `/admin` vereist aanmelding.
+Geheime OpenAI- en WhatsApp-tokens worden bewust niet via browserformulieren
+opgeslagen; die horen in de beveiligde hostingomgeving. De verbindingsstatus
+ervan is wel zichtbaar in het dashboard.
