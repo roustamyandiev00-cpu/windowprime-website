@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import type { SiteSettings } from "@/lib/site-settings";
+import { useEffect, useState } from "react";
+import { DEFAULT_SITE_SETTINGS, type SiteSettings } from "@/lib/site-settings";
 import { Brand } from "./Brand";
 
 type Tab = "overview" | "chats" | "seo" | "knowledge" | "settings";
@@ -10,57 +10,72 @@ type SettingsTab = "company" | "whatsapp" | "ai" | "handoff" | "notifications";
 type SaveState = "idle" | "saving" | "saved" | "error";
 type Connections = { openai: boolean; whatsapp: boolean };
 
-const conversations = [
-  { initials: "TV", name: "Tom Vermeulen", text: "Prijs voor aluminium schuifraam...", time: "2 min", urgent: true },
-  { initials: "SD", name: "Sarah De Smet", text: "AI heeft 4 vragen beantwoord", time: "18 min", urgent: false },
-  { initials: "JV", name: "Jan Vercammen", text: "Offerte-aanvraag ontvangen", time: "1 u", urgent: false },
-  { initials: "MK", name: "Mieke Claes", text: "Vraagt naar planning regio Leuven", time: "3 u", urgent: true },
-];
-
 export function AdminDashboard({
   initialSettings,
   initialConnections,
   adminName,
   adminEmail,
+  storageAvailable,
 }: {
   initialSettings: SiteSettings;
   initialConnections: Connections;
   adminName: string;
   adminEmail: string;
+  storageAvailable: boolean;
 }) {
   const [tab, setTab] = useState<Tab>("overview");
   const [settings, setSettings] = useState(initialSettings);
   const [connections, setConnections] = useState(initialConnections);
   const [saveState, setSaveState] = useState<SaveState>("idle");
-  const [score, setScore] = useState(78);
+  const [saveError, setSaveError] = useState("");
+  const [dirty, setDirty] = useState(false);
+  const score = [settings.seoTitle.trim().length > 0, settings.seoTitle.length <= 60,
+    settings.seoDescription.trim().length > 0, settings.seoDescription.length <= 160]
+    .filter(Boolean).length * 25;
+
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
 
   function updateSetting<K extends keyof SiteSettings>(key: K, value: SiteSettings[K]) {
     setSettings((current) => ({ ...current, [key]: value }));
     setSaveState("idle");
+    setDirty(true);
+    setSaveError("");
   }
 
   async function saveSettings() {
+    if (!storageAvailable || saveState === "saving") return;
     setSaveState("saving");
+    setSaveError("");
     try {
       const response = await fetch("/api/admin/settings", {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ settings }),
       });
-      if (!response.ok) throw new Error("save failed");
+      if (!response.ok) {
+        const error = await response.json() as { error?: string };
+        throw new Error(error.error ?? "Opslaan is mislukt. Probeer opnieuw.");
+      }
       const result = await response.json() as { settings: SiteSettings; connections: Connections };
       setSettings(result.settings);
       setConnections(result.connections);
       setSaveState("saved");
-    } catch {
+      setDirty(false);
+    } catch (error) {
       setSaveState("error");
+      setSaveError(error instanceof Error ? error.message : "Opslaan is mislukt. Controleer je verbinding.");
     }
   }
 
   function improveSeo() {
-    updateSetting("seoTitle", "Ramen en deuren op maat | Windowprime België");
-    updateSetting("seoDescription", "Ontdek energiezuinige aluminium en pvc ramen en deuren op maat. Persoonlijk advies, vakkundige plaatsing en 10 jaar garantie.");
-    setScore(92);
+    updateSetting("seoTitle", DEFAULT_SITE_SETTINGS.seoTitle);
+    updateSetting("seoDescription", DEFAULT_SITE_SETTINGS.seoDescription);
+    updateSetting("seoKeywords", DEFAULT_SITE_SETTINGS.seoKeywords);
   }
 
   return (
@@ -82,17 +97,24 @@ export function AdminDashboard({
 
       <section className="admin-main">
         <header className="admin-topbar">
-          <div><h1>{settings.companyName} beheer</h1><span className="status-pill">Website online</span></div>
-          <div className="topbar-actions"><Link className="topbar-link" href="/">Bekijk website ↗</Link><a className="topbar-link" href="/signout-with-chatgpt?return_to=/">Afmelden</a></div>
+          <div><h1>{settings.companyName} beheer</h1><span className="status-pill">Websitebeheer</span></div>
+          <div className="topbar-actions"><Link className="topbar-link" href="/" target="_blank" rel="noreferrer">Bekijk website ↗</Link><a className="topbar-link" href="/signout-with-chatgpt?return_to=/">Afmelden</a></div>
         </header>
 
         <div className="admin-content">
-          <div className="secure-banner"><span>✓</span><div><strong>Beveiligde beheeromgeving</strong><small>Ingelogd als {adminEmail}. Instellingen worden veilig op de server opgeslagen.</small></div></div>
+          <div className="secure-banner"><span>✓</span><div><strong>Beveiligde beheeromgeving</strong><small>Ingelogd als {adminEmail}. Alleen toegelaten beheerders kunnen instellingen wijzigen.</small></div></div>
+          {!storageAvailable && <div className="admin-notice" role="alert"><strong>Instellingen kunnen niet worden geladen.</strong><p>De database is niet beschikbaar of bevat ongeldige gegevens. Bewerken is geblokkeerd om je bestaande instellingen te beschermen. Herlaad de pagina nadat dit is hersteld.</p></div>}
+          <p className="admin-notice">De chat gebruikt vaste antwoorden. AI, gespreksopslag en automatische meldingen zijn nog niet aangesloten.</p>
+          {dirty && <p role="status">Je hebt niet-opgeslagen wijzigingen.</p>}
+          {saveState === "saved" && <p role="status">Instellingen opgeslagen.</p>}
+          {saveError && <p role="alert">{saveError}</p>}
+          <fieldset className="admin-editors" disabled={!storageAvailable || saveState === "saving"}>
           {tab === "overview" && <Overview score={score} onOpenChats={() => setTab("chats")} onOpenSeo={() => setTab("seo")} />}
           {tab === "chats" && <Chats />}
           {tab === "seo" && <SeoEditor settings={settings} score={score} onChange={updateSetting} onImprove={improveSeo} onSave={saveSettings} saveState={saveState} />}
           {tab === "knowledge" && <Knowledge settings={settings} onChange={updateSetting} onSave={saveSettings} saveState={saveState} />}
           {tab === "settings" && <SettingsPanel settings={settings} connections={connections} onChange={updateSetting} onSave={saveSettings} saveState={saveState} />}
+          </fieldset>
         </div>
       </section>
     </main>
@@ -100,7 +122,7 @@ export function AdminDashboard({
 }
 
 function NavButton({ number, active, onClick, children }: { number: string; active: boolean; onClick: () => void; children: React.ReactNode }) {
-  return <button className={active ? "active" : ""} onClick={onClick}><span>{number}</span>{children}</button>;
+  return <button aria-label={typeof children === "string" ? children : undefined} aria-pressed={active} className={active ? "active" : ""} onClick={onClick}><span>{number}</span>{children}</button>;
 }
 
 function Overview({ score, onOpenChats, onOpenSeo }: { score: number; onOpenChats: () => void; onOpenSeo: () => void }) {
@@ -108,14 +130,14 @@ function Overview({ score, onOpenChats, onOpenSeo }: { score: number; onOpenChat
     <div className="admin-section">
       <div className="admin-welcome"><div><h2>Goedemorgen.</h2><p>Beheer je website, AI en klantgesprekken vanuit één plek.</p></div><span className="date-box">Windowprime control center</span></div>
       <div className="metric-row">
-        <Metric label="Websitebezoekers" value="248" trend="+18% deze week" />
-        <Metric label="Nieuwe gesprekken" value="14" trend="+4 sinds gisteren" />
-        <Metric label="Offerte-aanvragen" value="6" trend="+2 deze week" />
-        <Metric label="AI opgelost" value="86%" trend="12 van 14 gesprekken" />
+        <Metric label="Websitebezoekers" value="—" trend="Meting nog niet aangesloten" />
+        <Metric label="Nieuwe gesprekken" value="—" trend="Gespreksopslag nog niet aangesloten" />
+        <Metric label="Offerte-aanvragen" value="—" trend="Registratie nog niet aangesloten" />
+        <Metric label="AI opgelost" value="—" trend="AI nog niet aangesloten" />
       </div>
       <div className="admin-grid">
-        <div className="admin-card"><div className="admin-card-header"><h3>Recente gesprekken</h3><button onClick={onOpenChats}>Alles bekijken →</button></div><div className="conversation-list">{conversations.slice(0, 3).map((chat) => <Conversation key={chat.name} {...chat} />)}</div></div>
-        <div className="admin-card seo-card"><div className="admin-card-header"><h3>SEO-gezondheid</h3><button onClick={onOpenSeo}>Open SEO →</button></div><div className="seo-score"><div className="score-ring" style={{ "--score": score } as React.CSSProperties}><strong>{score}</strong></div></div><p>{score > 90 ? "Sterk. Je belangrijkste pagina’s zijn geoptimaliseerd." : "Goed op weg. AI vond nog 5 verbeterpunten."}</p></div>
+        <div className="admin-card"><div className="admin-card-header"><h3>Recente gesprekken</h3><button onClick={onOpenChats}>Alles bekijken →</button></div><p>Er worden nog geen gesprekken opgeslagen.</p></div>
+        <div className="admin-card seo-card"><div className="admin-card-header"><h3>Metagegevenscontrole</h3><button onClick={onOpenSeo}>Open SEO →</button></div><div className="seo-score"><div className="score-ring" style={{ "--score": score } as React.CSSProperties}><strong>{score}</strong></div></div><p>Controle op ingevulde titel, omschrijving en hun lengte. Dit is geen zoekranking of volledige SEO-audit.</p></div>
       </div>
     </div>
   );
@@ -125,30 +147,21 @@ function Metric({ label, value, trend }: { label: string; value: string; trend: 
   return <article className="metric-card"><span>{label}</span><strong>{value}</strong><small>{trend}</small></article>;
 }
 
-function Conversation({ initials, name, text, time, urgent }: (typeof conversations)[number]) {
-  return <div className="conversation"><div className="conversation-avatar">{initials}</div><div><strong>{name} {urgent && <b className="tag tag--urgent">mens nodig</b>}</strong><small>{text}</small></div><span>{time}</span></div>;
-}
-
 function Chats() {
-  return (
-    <div className="admin-section">
-      <div className="admin-section-head"><h2>AI-gesprekken</h2><p>Volg vragen, antwoorden en overdrachten naar WhatsApp.</p></div>
-      <table className="data-table"><thead><tr><th>Klant</th><th>Laatste bericht</th><th>Status</th><th>Moment</th></tr></thead><tbody>{conversations.map((chat) => <tr key={chat.name}><td><strong>{chat.name}</strong></td><td>{chat.text}</td><td><span className={chat.urgent ? "tag tag--urgent" : "tag"}>{chat.urgent ? "WhatsApp nodig" : "AI afgehandeld"}</span></td><td>{chat.time}</td></tr>)}</tbody></table>
-    </div>
-  );
+  return <div className="admin-section"><div className="admin-section-head"><h2>Gesprekken</h2><p>Gespreksopslag is nog niet aangesloten. Chats op de website blijven alleen tijdens het bezoek in het geheugen van de browser.</p></div><div className="admin-card"><p>Er zijn geen opgeslagen gesprekken beschikbaar.</p></div></div>;
 }
 
 function SeoEditor({ settings, score, onChange, onImprove, onSave, saveState }: SettingsEditorProps & { score: number; onImprove: () => void }) {
   return (
     <div className="admin-section">
-      <SectionHead title="SEO & content" text="Pas zoekresultaten zelf aan of laat AI een voorstel maken." onSave={onSave} saveState={saveState} />
+      <SectionHead title="SEO & content" text="Bewerk titel en omschrijving of vul een vast tekstvoorstel in." onSave={onSave} saveState={saveState} />
       <div className="seo-editor">
         <div className="admin-card">
           <Field label="Paginatitel" hint={`${settings.seoTitle.length} van 60 aanbevolen tekens`}><input value={settings.seoTitle} onChange={(event) => onChange("seoTitle", event.target.value)} /></Field>
           <Field label="Meta-omschrijving" hint={`${settings.seoDescription.length} van 160 aanbevolen tekens`}><textarea rows={4} value={settings.seoDescription} onChange={(event) => onChange("seoDescription", event.target.value)} /></Field>
           <Field label="Zoekwoorden" hint="Komma-gescheiden, alleen relevante termen"><textarea rows={3} value={settings.seoKeywords} onChange={(event) => onChange("seoKeywords", event.target.value)} /></Field>
         </div>
-        <div className="admin-card seo-card"><div className="admin-card-header"><h3>SEO-score</h3><span className="tag">Homepagina</span></div><div className="seo-score"><div className="score-ring" style={{ "--score": score } as React.CSSProperties}><strong>{score}</strong></div></div><p>{score > 90 ? "Klaar voor controle en publicatie." : "AI kan titel en omschrijving verbeteren."}</p><button className="ai-button" onClick={onImprove}>✦ Verbeter met AI</button></div>
+        <div className="admin-card seo-card"><div className="admin-card-header"><h3>Metagegevenscontrole</h3><span className="tag">Homepagina</span></div><div className="seo-score"><div className="score-ring" style={{ "--score": score } as React.CSSProperties}><strong>{score}</strong></div></div><p>Controle op ingevulde titel, omschrijving en hun lengte. Geen volledige SEO-audit.</p><button className="ai-button" onClick={onImprove}>Tekstvoorstel invullen</button></div>
       </div>
     </div>
   );
@@ -157,7 +170,7 @@ function SeoEditor({ settings, score, onChange, onImprove, onSave, saveState }: 
 function Knowledge({ settings, onChange, onSave, saveState }: SettingsEditorProps) {
   return (
     <div className="admin-section">
-      <SectionHead title={`Kennis van ${settings.aiName}`} text="Deze informatie bepaalt wat de assistent betrouwbaar kan antwoorden." onSave={onSave} saveState={saveState} />
+      <SectionHead title={`Kennis van ${settings.aiName}`} text="Bewaar bedrijfsinformatie voor de toekomstige AI-koppeling. De huidige chatdemo gebruikt deze informatie nog niet." onSave={onSave} saveState={saveState} />
       <div className="admin-card knowledge-editor">
         <Field label="Bedrijfskennis" hint="Producten, materialen, werkgebied, werkwijze, garanties en vaak gestelde vragen."><textarea rows={16} value={settings.knowledgeText} onChange={(event) => onChange("knowledgeText", event.target.value)} /></Field>
         <div className="knowledge-tips"><strong>Goede kennis bevat:</strong><span>Producten en profielen</span><span>Prijs- en offertebeleid</span><span>Werkgebied en planning</span><span>Garantie en nazorg</span></div>
@@ -215,7 +228,7 @@ function HandoffSettings({ settings, onChange }: Pick<SettingsEditorProps, "sett
 }
 
 function NotificationSettings({ settings, onChange }: Pick<SettingsEditorProps, "settings" | "onChange">) {
-  return <><SettingsTitle title="Meldingen & privacy" text="Bepaal wie meldingen krijgt en hoe lang klantgegevens bewaard blijven." /><Field label="E-mailadres voor meldingen"><input type="email" value={settings.notificationEmail} onChange={(e) => onChange("notificationEmail", e.target.value)} /></Field><Toggle label="Nieuwe lead" text="Stuur een melding bij een nieuwe offerteaanvraag." checked={settings.notifyNewLead} onChange={(value) => onChange("notifyNewLead", value)} /><Toggle label="Menselijke overdracht" text="Stuur een melding wanneer de AI hulp vraagt." checked={settings.notifyHandoff} onChange={(value) => onChange("notifyHandoff", value)} /><Toggle label="Toestemming vragen" text="Vraag toestemming voordat contactgegevens worden verwerkt." checked={settings.privacyConsentRequired} onChange={(value) => onChange("privacyConsentRequired", value)} /><Field label="Bewaartermijn gesprekken (dagen)" hint="Tussen 1 en 730 dagen"><input type="number" min="1" max="730" value={settings.privacyRetentionDays} onChange={(e) => onChange("privacyRetentionDays", Number(e.target.value))} /></Field></>;
+  return <><SettingsTitle title="Meldingen & privacy" text="Voorbereiding voor toekomstige meldingen en gespreksopslag. Deze instellingen zijn nog niet actief." /><Field label="E-mailadres voor meldingen"><input type="email" value={settings.notificationEmail} onChange={(e) => onChange("notificationEmail", e.target.value)} /></Field><Toggle label="Nieuwe lead" text="Stuur een melding bij een nieuwe offerteaanvraag." checked={settings.notifyNewLead} onChange={(value) => onChange("notifyNewLead", value)} /><Toggle label="Menselijke overdracht" text="Stuur een melding wanneer de AI hulp vraagt." checked={settings.notifyHandoff} onChange={(value) => onChange("notifyHandoff", value)} /><Toggle label="Toestemming vragen" text="Vraag toestemming voordat contactgegevens worden verwerkt." checked={settings.privacyConsentRequired} onChange={(value) => onChange("privacyConsentRequired", value)} /><Field label="Bewaartermijn gesprekken (dagen)" hint="Tussen 1 en 730 dagen"><input type="number" min="1" max="730" value={settings.privacyRetentionDays} onChange={(e) => onChange("privacyRetentionDays", Number(e.target.value))} /></Field></>;
 }
 
 function SectionHead({ title, text, onSave, saveState }: { title: string; text: string; onSave: () => Promise<void>; saveState: SaveState }) {
@@ -235,9 +248,9 @@ function Toggle({ label, text, checked, onChange }: { label: string; text: strin
 }
 
 function Connection({ name, connected }: { name: string; connected: boolean }) {
-  return <div className={`connection-row ${connected ? "connection-row--connected" : ""}`}><span><i />{name}</span><strong>{connected ? "Verbonden" : "Nog niet verbonden"}</strong></div>;
+  return <div className={`connection-row ${connected ? "connection-row--connected" : ""}`}><span><i />{name}</span><strong>{connected ? "Sleutel ingesteld · niet getest" : "Geen sleutel ingesteld"}</strong></div>;
 }
 
 function SecretNotice({ provider, configured }: { provider: string; configured: boolean }) {
-  return <div className="secret-notice"><strong>{configured ? "Beveiligde sleutel actief" : `${provider}-sleutel nog nodig`}</strong><p>API-sleutels worden nooit in dit dashboard of de database getoond. Ze worden eenmalig toegevoegd aan de beveiligde hostingomgeving.</p></div>;
+  return <div className="secret-notice"><strong>{configured ? "Sleutel ingesteld, verbinding niet getest" : `${provider}-sleutel nog nodig`}</strong><p>API-sleutels worden nooit in dit dashboard of de database getoond. Ze worden eenmalig toegevoegd aan de beveiligde hostingomgeving.</p></div>;
 }

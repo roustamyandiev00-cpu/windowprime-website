@@ -1,5 +1,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { hasTrustedIdentity } from "@/lib/admin-access";
+import { readRuntimeEnvironment } from "@/lib/runtime-env";
 
 export type ChatGPTUser = {
   displayName: string;
@@ -18,7 +20,8 @@ const CALLBACK_PATH = "/callback";
 
 export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
   const requestHeaders = await headers();
-  const email = requestHeaders.get(USER_EMAIL_HEADER);
+  if (!await hasTrustedIdentity(requestHeaders, await readRuntimeEnvironment())) return null;
+  const email = requestHeaders.get(USER_EMAIL_HEADER)?.trim();
   if (!email) return null;
 
   const encodedFullName = requestHeaders.get(USER_FULL_NAME_HEADER);

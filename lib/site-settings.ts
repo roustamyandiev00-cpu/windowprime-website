@@ -39,15 +39,16 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   address: "België",
   serviceArea: "Vlaanderen en Brussel",
   openingHours: "Ma–Vr · 08:00–18:00",
-  seoTitle: "Windowprime | Ramen & deuren op maat",
+  seoTitle: "Ramen en deuren op maat in Vlaanderen | Windowprime",
   seoDescription:
-    "Hoogwaardige ramen en deuren op maat, professioneel geplaatst in heel België.",
-  seoKeywords: "ramen, deuren, aluminium ramen, pvc ramen, België",
+    "Aluminium en PVC ramen, deuren en schuiframen op maat in Vlaanderen en Brussel. Advies voor renovatie en nieuwbouw. Vraag vrijblijvend een offerte.",
+  seoKeywords:
+    "ramen, deuren, ramen op maat, deuren op maat, aluminium ramen, pvc ramen, schuiframen, ramen Vlaanderen, ramen Brussel, ramen en deuren, renovatie ramen, nieuwbouw ramen, Windowprime",
   aiName: "Nova",
   aiTone: "warm",
   aiWelcomeMessage: "Hallo, ik ben Nova van Windowprime. Waarmee kan ik je helpen?",
   aiFallbackMessage:
-    "Dat wil ik correct voor je uitzoeken. Ik verbind je graag met een Windowprime-specialist.",
+    "Neem hiervoor contact op met een Windowprime-specialist via e-mail of WhatsApp.",
   aiSystemPrompt:
     "Antwoord helder, eerlijk en behulpzaam. Doe geen prijs- of planningbeloftes die niet in de kennisbank staan.",
   aiLanguages: "Nederlands, Frans, Engels",
@@ -128,8 +129,45 @@ export function sanitizeSiteSettings(input: unknown): SiteSettings {
   return settings;
 }
 
+// Writes require a complete, valid snapshot; malformed requests must never reset
+// existing company settings to defaults.
+export function validateSiteSettings(input: unknown):
+  { ok: true; settings: SiteSettings } | { ok: false; error: string } {
+  if (typeof input !== "object" || input === null || Array.isArray(input)) {
+    return { ok: false, error: "Instellingen ontbreken" };
+  }
+  const source = input as Record<string, unknown>;
+  for (const key of Object.keys(DEFAULT_SITE_SETTINGS) as Array<keyof SiteSettings>) {
+    const value = source[key];
+    if (typeof value !== typeof DEFAULT_SITE_SETTINGS[key]) return { ok: false, error: `Ongeldige instelling: ${key}` };
+    if (typeof value === "string" && value.length > stringLimits[key]) return { ok: false, error: `Te lange instelling: ${key}` };
+  }
+  for (const key of ["companyName", "aiName", "seoTitle", "seoDescription"]) {
+    if (!(source[key] as string).trim()) return { ok: false, error: `Vul ${key} in` };
+  }
+  for (const key of ["companyEmail", "notificationEmail"]) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((source[key] as string).trim())) return { ok: false, error: `Ongeldig e-mailadres: ${key}` };
+  }
+  for (const key of ["phoneNumber", "whatsappNumber"]) {
+    const value = (source[key] as string).trim();
+    const digits = toWhatsAppNumber(value);
+    if (!/^\+?[\d\s().-]+$/.test(value) || !/^[1-9]\d{7,14}$/.test(digits)) return { ok: false, error: `Ongeldig telefoonnummer: ${key}` };
+  }
+  if (!["professioneel", "warm", "direct"].includes(source.aiTone as string)) return { ok: false, error: "Ongeldige gesprekstoon" };
+  for (const [key, min, max] of [["confidenceThreshold", 0, 100], ["privacyRetentionDays", 1, 730]] as const) {
+    const value = source[key] as number;
+    if (!Number.isInteger(value) || value < min || value > max) return { ok: false, error: `Ongeldige waarde: ${key}` };
+  }
+  return { ok: true, settings: sanitizeSiteSettings(source) };
+}
+
+export function seoKeywordList(value: string): string[] {
+  return value.split(",").map((keyword) => keyword.trim()).filter(Boolean);
+}
+
 export function toWhatsAppNumber(value: string): string {
   const digits = value.replace(/\D/g, "");
+  if (digits.startsWith("00")) return digits.slice(2);
   if (digits.startsWith("32")) return digits;
   if (digits.startsWith("0")) return `32${digits.slice(1)}`;
   return digits;

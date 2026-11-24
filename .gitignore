@@ -31,6 +31,10 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# IDE
+.vscode/
+.kiro/
+
 # vercel
 .vercel
 
@@ -41,3 +45,6 @@ next-env.d.ts
 /.wrangler/
 /outputs/
 /work/
+/examples/
+/.openai/
+/build/

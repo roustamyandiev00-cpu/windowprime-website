@@ -1,5 +1,5 @@
 import { eq, sql } from "drizzle-orm";
-import { DEFAULT_SITE_SETTINGS, sanitizeSiteSettings, type SiteSettings } from "@/lib/site-settings";
+import { DEFAULT_SITE_SETTINGS, sanitizeSiteSettings, validateSiteSettings, type SiteSettings } from "@/lib/site-settings";
 import { getDb } from ".";
 import { siteSettings } from "./schema";
 
@@ -15,14 +15,16 @@ export async function readSiteSettings(): Promise<SiteSettings> {
 
   if (!row) return DEFAULT_SITE_SETTINGS;
 
-  try {
-    return sanitizeSiteSettings(JSON.parse(row.config));
-  } catch {
-    return DEFAULT_SITE_SETTINGS;
-  }
+  // Let the caller report corrupt storage instead of silently replacing it.
+  const config: unknown = JSON.parse(row.config);
+  const validated = validateSiteSettings(config);
+  if (!validated.ok) throw new Error("Invalid stored settings");
+  return validated.settings;
 }
 
 export async function writeSiteSettings(settings: SiteSettings, updatedBy: string) {
+  // Refuse to overwrite unreadable existing data, including through direct API calls.
+  await readSiteSettings();
   const sanitized = sanitizeSiteSettings(settings);
   const db = await getDb();
   await db
