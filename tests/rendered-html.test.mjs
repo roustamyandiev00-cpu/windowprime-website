@@ -98,3 +98,19 @@ test("offerte-API weigert een onvolledige aanvraag", async () => {
   assert.equal(response.status, 400);
   assert.match((await response.json()).error, /Naam is verplicht/);
 });
+
+test("offerte-API meldt duidelijk wanneer opslag niet beschikbaar is", async () => {
+  const response = await request("/api/offerte", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      name: "Testpersoon",
+      email: "test@example.com",
+      phone: "",
+      project: "renovatie",
+      message: "Ik wil graag informatie over ramen.",
+    }),
+  });
+  assert.equal(response.status, 503);
+  assert.match((await response.json()).error, /niet beschikbaar|niet worden opgeslagen/);
+});

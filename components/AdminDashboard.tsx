@@ -9,6 +9,7 @@ type Tab = "overview" | "chats" | "seo" | "knowledge" | "settings";
 type SettingsTab = "company" | "whatsapp" | "ai" | "handoff" | "notifications";
 type SaveState = "idle" | "saving" | "saved" | "error";
 type Connections = { openai: boolean; whatsapp: boolean };
+type Lead = { id: number; name: string; email: string; phone: string; project: string; message: string; createdAt: string };
 
 export function AdminDashboard({
   initialSettings,
@@ -16,12 +17,14 @@ export function AdminDashboard({
   adminName,
   adminEmail,
   storageAvailable,
+  initialLeads,
 }: {
   initialSettings: SiteSettings;
   initialConnections: Connections;
   adminName: string;
   adminEmail: string;
   storageAvailable: boolean;
+  initialLeads: Lead[];
 }) {
   const [tab, setTab] = useState<Tab>("overview");
   const [settings, setSettings] = useState(initialSettings);
@@ -29,6 +32,7 @@ export function AdminDashboard({
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [saveError, setSaveError] = useState("");
   const [dirty, setDirty] = useState(false);
+  const [leads] = useState(initialLeads);
   const score = [settings.seoTitle.trim().length > 0, settings.seoTitle.length <= 60,
     settings.seoDescription.trim().length > 0, settings.seoDescription.length <= 160]
     .filter(Boolean).length * 25;
@@ -109,8 +113,8 @@ export function AdminDashboard({
           {saveState === "saved" && <p role="status">Instellingen opgeslagen.</p>}
           {saveError && <p role="alert">{saveError}</p>}
           <fieldset className="admin-editors" disabled={!storageAvailable || saveState === "saving"}>
-          {tab === "overview" && <Overview score={score} onOpenChats={() => setTab("chats")} onOpenSeo={() => setTab("seo")} />}
-          {tab === "chats" && <Chats />}
+          {tab === "overview" && <Overview score={score} leadCount={leads.length} onOpenChats={() => setTab("chats")} onOpenSeo={() => setTab("seo")} />}
+          {tab === "chats" && <Chats leads={leads} />}
           {tab === "seo" && <SeoEditor settings={settings} score={score} onChange={updateSetting} onImprove={improveSeo} onSave={saveSettings} saveState={saveState} />}
           {tab === "knowledge" && <Knowledge settings={settings} onChange={updateSetting} onSave={saveSettings} saveState={saveState} />}
           {tab === "settings" && <SettingsPanel settings={settings} connections={connections} onChange={updateSetting} onSave={saveSettings} saveState={saveState} />}
@@ -125,18 +129,18 @@ function NavButton({ number, active, onClick, children }: { number: string; acti
   return <button aria-label={typeof children === "string" ? children : undefined} aria-pressed={active} className={active ? "active" : ""} onClick={onClick}><span>{number}</span>{children}</button>;
 }
 
-function Overview({ score, onOpenChats, onOpenSeo }: { score: number; onOpenChats: () => void; onOpenSeo: () => void }) {
+function Overview({ score, leadCount, onOpenChats, onOpenSeo }: { score: number; leadCount: number; onOpenChats: () => void; onOpenSeo: () => void }) {
   return (
     <div className="admin-section">
       <div className="admin-welcome"><div><h2>Goedemorgen.</h2><p>Beheer je website, AI en klantgesprekken vanuit één plek.</p></div><span className="date-box">Windowprime control center</span></div>
       <div className="metric-row">
         <Metric label="Websitebezoekers" value="—" trend="Meting nog niet aangesloten" />
         <Metric label="Nieuwe gesprekken" value="—" trend="Gespreksopslag nog niet aangesloten" />
-        <Metric label="Offerte-aanvragen" value="—" trend="Registratie nog niet aangesloten" />
+        <Metric label="Offerte-aanvragen" value={String(leadCount)} trend={leadCount === 1 ? "1 opgeslagen aanvraag" : `${leadCount} opgeslagen aanvragen`} />
         <Metric label="AI opgelost" value="—" trend="AI nog niet aangesloten" />
       </div>
       <div className="admin-grid">
-        <div className="admin-card"><div className="admin-card-header"><h3>Recente gesprekken</h3><button onClick={onOpenChats}>Alles bekijken →</button></div><p>Er worden nog geen gesprekken opgeslagen.</p></div>
+        <div className="admin-card"><div className="admin-card-header"><h3>Recente gesprekken</h3><button onClick={onOpenChats}>Alles bekijken →</button></div><p>Er worden nog geen chats opgeslagen.</p></div>
         <div className="admin-card seo-card"><div className="admin-card-header"><h3>Metagegevenscontrole</h3><button onClick={onOpenSeo}>Open SEO →</button></div><div className="seo-score"><div className="score-ring" style={{ "--score": score } as React.CSSProperties}><strong>{score}</strong></div></div><p>Controle op ingevulde titel, omschrijving en hun lengte. Dit is geen zoekranking of volledige SEO-audit.</p></div>
       </div>
     </div>
@@ -147,8 +151,27 @@ function Metric({ label, value, trend }: { label: string; value: string; trend: 
   return <article className="metric-card"><span>{label}</span><strong>{value}</strong><small>{trend}</small></article>;
 }
 
-function Chats() {
-  return <div className="admin-section"><div className="admin-section-head"><h2>Gesprekken</h2><p>Gespreksopslag is nog niet aangesloten. Chats op de website blijven alleen tijdens het bezoek in het geheugen van de browser.</p></div><div className="admin-card"><p>Er zijn geen opgeslagen gesprekken beschikbaar.</p></div></div>;
+function Chats({ leads }: { leads: Lead[] }) {
+  return (
+    <div className="admin-section">
+      <div className="admin-section-head"><h2>Gesprekken</h2><p>De chatdemo slaat geen gesprekken op. Hier worden wel ontvangen offerteaanvragen weergegeven.</p></div>
+      {leads.length === 0 ? (
+        <div className="admin-card"><p>Er zijn nog geen offerteaanvragen ontvangen.</p></div>
+      ) : (
+        <div className="admin-grid">
+          {leads.map((lead) => (
+            <article className="admin-card" key={lead.id}>
+              <div className="admin-card-header"><h3>{lead.name}</h3><span className="tag">{lead.project || "Project niet opgegeven"}</span></div>
+              <p><strong>E-mail:</strong> <a href={`mailto:${lead.email}`}>{lead.email}</a></p>
+              {lead.phone && <p><strong>Telefoon:</strong> <a href={`tel:${lead.phone}`}>{lead.phone}</a></p>}
+              <p>{lead.message}</p>
+              <small>{new Intl.DateTimeFormat("nl-BE", { dateStyle: "medium", timeStyle: "short" }).format(new Date(lead.createdAt))}</small>
+            </article>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function SeoEditor({ settings, score, onChange, onImprove, onSave, saveState }: SettingsEditorProps & { score: number; onImprove: () => void }) {

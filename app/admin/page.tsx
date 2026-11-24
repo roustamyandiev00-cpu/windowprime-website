@@ -4,6 +4,7 @@ import { authorizeAdmin } from "@/app/admin-access";
 import { chatGPTSignInPath } from "@/app/chatgpt-auth";
 import { AdminDashboard } from "@/components/AdminDashboard";
 import { readSiteSettings } from "@/db/settings";
+import { listQuoteRequests } from "@/db/leads";
 import { DEFAULT_SITE_SETTINGS } from "@/lib/site-settings";
 import { readConnectionStatus, readRuntimeEnvironment } from "@/lib/runtime-env";
 
@@ -24,10 +25,21 @@ export default async function AdminPage() {
 
   let settings = DEFAULT_SITE_SETTINGS;
   let storageAvailable = true;
+  let leads: Array<{ id: number; name: string; email: string; phone: string; project: string; message: string; createdAt: string }> = [];
   try {
     settings = await readSiteSettings();
   } catch {
     storageAvailable = false;
+  }
+  if (storageAvailable) {
+    try {
+      leads = (await listQuoteRequests()).map((lead) => ({
+        ...lead,
+        createdAt: lead.createdAt.toISOString(),
+      }));
+    } catch {
+      leads = [];
+    }
   }
   const connections = await readConnectionStatus();
 
@@ -38,6 +50,7 @@ export default async function AdminPage() {
       adminEmail={user.email}
       initialConnections={connections}
       storageAvailable={storageAvailable}
+      initialLeads={leads}
     />
   );
 }

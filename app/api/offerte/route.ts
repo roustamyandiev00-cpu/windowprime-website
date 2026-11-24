@@ -1,3 +1,5 @@
+import { createQuoteRequest } from "@/db/leads";
+
 const MAX_BODY = 8192;
 
 export async function POST(request: Request) {
@@ -91,19 +93,26 @@ export async function POST(request: Request) {
     );
   }
 
-  // For now: log the request. In production, this should send an email
-  // via a service like Resend, SendGrid, or Vercel's email integration.
-  console.log("[OFFERTE]", {
-    name: name.trim(),
-    email: email.trim(),
-    phone: typeof phone === "string" ? phone.trim() : "",
-    project: project ?? "",
-    message: message.trim().slice(0, 2000),
-    timestamp: new Date().toISOString(),
-  });
+  if (!process.env.DATABASE_URL) {
+    return Response.json(
+      { error: "Offerteopslag is niet beschikbaar" },
+      { status: 503 },
+    );
+  }
 
-  // TODO: Send email notification to companyEmail
-  // TODO: Store in database for admin dashboard
-
-  return Response.json({ ok: true });
+  try {
+    await createQuoteRequest({
+      name: name.trim(),
+      email: email.trim(),
+      phone: typeof phone === "string" ? phone.trim() : "",
+      project: typeof project === "string" ? project : "",
+      message: message.trim(),
+    });
+    return Response.json({ ok: true });
+  } catch {
+    return Response.json(
+      { error: "De aanvraag kon niet worden opgeslagen" },
+      { status: 503 },
+    );
+  }
 }
